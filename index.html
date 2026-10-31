@@ -164,10 +164,11 @@
   <ul id="list" class="list"></ul>
   <p id="empty" class="empty">Le foto convertite compaiono qui.</p>
 
-  <p class="note">La conversione avviene nel tuo dispositivo: le foto non lasciano il telefono o il computer. La rotazione EXIF viene applicata ai pixel, poi tutti i metadati (EXIF, GPS, profilo) vengono scartati. Le PNG mantengono la trasparenza.</p>
+  <p class="note">La conversione avviene nel tuo dispositivo: le foto non lasciano il telefono o il computer. La rotazione EXIF viene applicata ai pixel, poi il file viene ripulito di tutto ciò che non è immagine: EXIF, GPS, XMP, profilo colore, manifesti C2PA. La compressione usa libwebp alla massima efficienza, quindi è più lenta ma i file sono più leggeri. Le PNG mantengono la trasparenza.</p>
 </main>
 
-<script>
+<script type="module">
+import { cleanWebp } from './webp-clean.js';
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -186,8 +187,34 @@
   (() => {
     const c = document.createElement('canvas'); c.width = c.height = 1;
     webpOK = c.toDataURL('image/webp').startsWith('data:image/webp');
-    if (!webpOK) $('unsupported').hidden = false;
+    if (!webpOK && typeof WebAssembly === 'undefined') $('unsupported').hidden = false;
   })();
+
+  // ---- libwebp encoder in a worker (smaller files than the browser's encoder) ----
+  let worker = null, wid = 0;
+  const pending = new Map();
+  const failWorker = () => {
+    worker = null;
+    for (const p of pending.values()) p.reject(new Error('encoder non disponibile'));
+    pending.clear();
+  };
+  try {
+    worker = new Worker('encoder.js', { type: 'module' });
+    worker.onmessage = ({ data }) => {
+      const p = pending.get(data.id); if (!p) return;
+      pending.delete(data.id);
+      data.error ? p.reject(new Error(data.error)) : p.resolve(new Uint8Array(data.buffer));
+    };
+    worker.onerror = failWorker;
+  } catch (_) { worker = null; }
+
+  function wasmEncode(img, q) {
+    return new Promise((resolve, reject) => {
+      const id = ++wid;
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id, pixels: img.data, width: img.width, height: img.height, quality: q }, [img.data.buffer]);
+    });
+  }
 
   // ---- settings (remembered per device) ----
   try {
@@ -262,7 +289,6 @@
   async function convert(item) {
     item.status = 'working'; render(item);
     try {
-      if (!webpOK) throw new Error('WebP non supportato da questo browser');
       const src = await decode(item.file);
       const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
       const max = Number(maxside.value) || 0;
@@ -270,13 +296,24 @@
       const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(src, 0, 0, w, h);
       if (src.close) src.close();
-      const blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', Number(quality.value) / 100));
+      const q = Number(quality.value);
+      let bytes;
+      if (worker) {
+        try { bytes = await wasmEncode(ctx.getImageData(0, 0, w, h), q); } catch (_) { bytes = null; }
+      }
+      if (!bytes) {
+        // Fallback: the browser's own encoder, then the same metadata cleanup
+        if (!webpOK) throw new Error('WebP non supportato da questo browser');
+        const b = await new Promise((res) => canvas.toBlob(res, 'image/webp', q / 100));
+        if (!b || b.type !== 'image/webp') throw new Error('WebP non supportato da questo browser');
+        bytes = cleanWebp(new Uint8Array(await b.arrayBuffer()));
+      }
       canvas.width = canvas.height = 0;
-      if (!blob || blob.type !== 'image/webp') throw new Error('WebP non supportato da questo browser');
+      const blob = new Blob([bytes], { type: 'image/webp' });
       if (item.url) URL.revokeObjectURL(item.url);
       Object.assign(item, { blob, w, h, url: URL.createObjectURL(blob), status: 'done', err: undefined });
     } catch (e) {

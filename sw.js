@@ -1,5 +1,5 @@
 // Cache-first app shell: after the first visit the app works fully offline.
-const CACHE = 'img2webp-v3';
+const CACHE = 'img2webp-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,13 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './encoder.js',
+  './webp-clean.js',
+  './vendor/webp/webp_enc.js',
+  './vendor/webp/webp_enc.wasm',
+  './vendor/webp/webp_enc_simd.js',
+  './vendor/webp/webp_enc_simd.wasm'
 ];
 
 self.addEventListener('install', (e) => {
