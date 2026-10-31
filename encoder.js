@@ -32,7 +32,7 @@ const BASE = {
   low_memory: 0,
   near_lossless: 100,
   use_delta_palette: 0,
-  use_sharp_yuv: 0      // sharp YUV costs ~10% more bytes: off, size first
+  use_sharp_yuv: 0      // sharp YUV costs ~10% more bytes: off unless the user asks for it
 };
 
 let modP;
@@ -42,11 +42,11 @@ async function load() {
   return factory({ noInitialRun: true });
 }
 
-self.onmessage = async ({ data: { id, pixels, width, height, quality } }) => {
+self.onmessage = async ({ data: { id, pixels, width, height, quality, sharp } }) => {
   try {
     modP = modP || load().catch((e) => { modP = undefined; throw e; });
     const mod = await modP;
-    const raw = mod.encode(pixels, width, height, { ...BASE, quality });
+    const raw = mod.encode(pixels, width, height, { ...BASE, quality, use_sharp_yuv: sharp ? 1 : 0 });
     if (!raw) throw new Error('Codifica WebP non riuscita');
     const out = cleanWebp(new Uint8Array(raw)).slice();
     self.postMessage({ id, buffer: out.buffer }, [out.buffer]);

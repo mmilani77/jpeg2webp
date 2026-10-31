@@ -69,6 +69,10 @@
   .field { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .field label { font-size: .85rem; color: var(--muted); white-space: nowrap; }
   .field output { font: 600 14px var(--mono); min-width: 2.5ch; font-variant-numeric: tabular-nums; }
+  .field.check { gap: 8px; }
+  .field.check label { color: var(--ink); white-space: normal; }
+  .field.check .cost { color: var(--muted); }
+  input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; flex: none; }
   input[type=range] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
   select {
     font: inherit; font-size: .9rem; color: var(--ink); background: var(--bg);
@@ -150,6 +154,10 @@
         <option value="800">max 800 px</option>
       </select>
     </div>
+    <div class="field check">
+      <input id="sharp" type="checkbox">
+      <label for="sharp">Bordi colorati più nitidi <span class="cost">(+10% circa di peso)</span></label>
+    </div>
   </section>
 
   <div class="bar">
@@ -173,7 +181,7 @@ import { cleanWebp } from './webp-clean.js';
   'use strict';
   const $ = (id) => document.getElementById(id);
   const drop = $('drop'), fileInput = $('file'), list = $('list'), empty = $('empty');
-  const quality = $('quality'), qout = $('qout'), maxside = $('maxside');
+  const quality = $('quality'), qout = $('qout'), maxside = $('maxside'), sharp = $('sharp');
   const summary = $('summary'), btnZip = $('zip'), btnClear = $('clear'), btnShare = $('share');
 
   /** @type {{id:number,file:File,status:string,blob?:Blob,w?:number,h?:number,err?:string,url?:string,el:HTMLElement}[]} */
@@ -212,7 +220,7 @@ import { cleanWebp } from './webp-clean.js';
     return new Promise((resolve, reject) => {
       const id = ++wid;
       pending.set(id, { resolve, reject });
-      worker.postMessage({ id, pixels: img.data, width: img.width, height: img.height, quality: q }, [img.data.buffer]);
+      worker.postMessage({ id, pixels: img.data, width: img.width, height: img.height, quality: q, sharp: sharp.checked }, [img.data.buffer]);
     });
   }
 
@@ -221,9 +229,10 @@ import { cleanWebp } from './webp-clean.js';
     const s = JSON.parse(localStorage.getItem('jpg2webp') || '{}');
     if (s.q) quality.value = s.q;
     if (s.m != null) maxside.value = String(s.m);
+    sharp.checked = !!s.s;
   } catch (_) {}
   qout.textContent = quality.value;
-  const saveSettings = () => { try { localStorage.setItem('jpg2webp', JSON.stringify({ q: quality.value, m: maxside.value })); } catch (_) {} };
+  const saveSettings = () => { try { localStorage.setItem('jpg2webp', JSON.stringify({ q: quality.value, m: maxside.value, s: sharp.checked })); } catch (_) {} };
 
   let reTimer;
   const reconvertAll = () => {
@@ -233,6 +242,7 @@ import { cleanWebp } from './webp-clean.js';
   };
   quality.addEventListener('input', () => { qout.textContent = quality.value; reconvertAll(); });
   maxside.addEventListener('change', reconvertAll);
+  sharp.addEventListener('change', reconvertAll);
 
   // ---- input ----
   drop.addEventListener('click', () => fileInput.click());
