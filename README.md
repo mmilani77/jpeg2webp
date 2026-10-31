@@ -1,7 +1,7 @@
-# JPG → WebP (PWA)
+# JPG/PNG → WebP (PWA)
 
-Converte foto JPG in WebP interamente nel browser. Nessun upload; EXIF/GPS/profili scartati
-(la rotazione EXIF viene prima applicata ai pixel). Funziona offline dopo la prima apertura.
+Converte immagini JPG e PNG in WebP interamente nel browser. Nessun upload; EXIF/GPS/profili scartati
+(la rotazione EXIF viene prima applicata ai pixel). Le PNG mantengono la trasparenza. Funziona offline dopo la prima apertura.
 
 Funzioni: qualità regolabile, ridimensionamento opzionale del lato lungo, più file insieme,
 download singolo o .zip, "Condividi" su mobile (per salvare in galleria), "Apri con…" su desktop

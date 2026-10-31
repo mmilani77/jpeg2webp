@@ -1,7 +1,7 @@
 {
-  "name": "JPG → WebP",
+  "name": "JPG/PNG → WebP",
   "short_name": "WebP",
-  "description": "Converte foto JPG in WebP nel browser, senza upload e senza metadati.",
+  "description": "Converte immagini JPG e PNG in WebP nel browser, senza upload e senza metadati.",
   "lang": "it",
   "start_url": "./",
   "scope": "./",
@@ -14,6 +14,6 @@
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "file_handlers": [
-    { "action": "./", "accept": { "image/jpeg": [".jpg", ".jpeg"] } }
+    { "action": "./", "accept": { "image/jpeg": [".jpg", ".jpeg"], "image/png": [".png"] } }
   ]
 }
