@@ -1,4 +1,4 @@
-# JPG/PNG → WebP (PWA)
+# img2webp
 
 Converte immagini JPG e PNG in WebP interamente nel browser. Nessun upload; EXIF/GPS/profili scartati
 (la rotazione EXIF viene prima applicata ai pixel). Le PNG mantengono la trasparenza. Funziona offline dopo la prima apertura.

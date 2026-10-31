@@ -1,6 +1,6 @@
 {
-  "name": "JPG/PNG → WebP",
-  "short_name": "WebP",
+  "name": "img2webp",
+  "short_name": "img2webp",
   "description": "Converte immagini JPG e PNG in WebP nel browser, senza upload e senza metadati.",
   "lang": "it",
   "start_url": "./",

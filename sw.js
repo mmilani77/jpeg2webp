@@ -1,5 +1,5 @@
 // Cache-first app shell: after the first visit the app works fully offline.
-const CACHE = 'jpg2webp-v2';
+const CACHE = 'img2webp-v3';
 const ASSETS = [
   './',
   './index.html',
