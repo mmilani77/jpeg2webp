@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JPG → WebP</title>
+<meta name="description" content="Converte foto JPG in WebP direttamente nel browser. Nessun upload, metadati rimossi.">
+<meta name="theme-color" content="#f2f5f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1514" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WebP">
+<style>
+  /* Layout: una colonna stretta da strumento — zona di caricamento, regolazioni, elenco risultati */
+  :root {
+    --bg: #f2f5f4;
+    --surface: #ffffff;
+    --ink: #14201f;
+    --muted: #5a6a67;
+    --line: #d6dfdc;
+    --accent: #0b7a68;
+    --accent-ink: #ffffff;
+    --accent-soft: #dcefea;
+    --err: #b3261e;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, monospace;
+    --r: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1514; --surface: #151f1e; --ink: #e4ecea; --muted: #8e9f9b;
+      --line: #263330; --accent: #3cc2a6; --accent-ink: #04261f; --accent-soft: #163a33;
+      --err: #ff8a80; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding-block: 28px 48px; display: grid; gap: 20px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; }
+  h1 .arrow { color: var(--accent); }
+  .tag { font: 12px var(--mono); color: var(--muted); letter-spacing: 0.02em; }
+
+  .drop {
+    display: grid; place-items: center; gap: 6px; text-align: center;
+    padding: 36px 20px; border: 2px dashed var(--line); border-radius: var(--r);
+    background: var(--surface); cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over, .drop:focus-visible { border-color: var(--accent); background: var(--accent-soft); outline: none; }
+  .drop strong { font-size: 1.05rem; }
+  .drop span { color: var(--muted); font-size: .9rem; }
+  input[type=file] { display: none; }
+
+  .settings {
+    display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center;
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface);
+  }
+  .field { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .field label { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+  .field output { font: 600 14px var(--mono); min-width: 2.5ch; font-variant-numeric: tabular-nums; }
+  input[type=range] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
+  select {
+    font: inherit; font-size: .9rem; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+  }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .summary { font: 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: 600 14px var(--font); border-radius: 8px; padding: 9px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .item {
+    display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+    padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .thumb { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; background: var(--bg); }
+  .meta { min-width: 0; }
+  .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .info { font: 12.5px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .info .gain { color: var(--accent); font-weight: 600; }
+  .info.error { color: var(--err); }
+  .item-actions { display: flex; gap: 6px; }
+  .item-actions button { padding: 7px 10px; font-size: 13px; }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: spin .8s linear infinite; margin: 0 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.5s; } }
+
+  .empty { color: var(--muted); font-size: .9rem; text-align: center; padding: 8px; }
+  .note { color: var(--muted); font-size: .82rem; }
+  .warn { color: var(--err); font-size: .9rem; }
+
+  @media (max-width: 480px) {
+    .item { grid-template-columns: 48px minmax(0, 1fr); }
+    .thumb { width: 48px; height: 48px; }
+    .item-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>JPG <span class="arrow">→</span> WebP</h1>
+    <span class="tag">in locale · niente upload · EXIF rimossi</span>
+  </header>
+
+  <p id="unsupported" class="warn" hidden>Questo browser non sa codificare WebP (succede su Safari meno recente). Usa Chrome, Edge, Firefox o Safari aggiornato.</p>
+
+  <div id="drop" class="drop" tabindex="0" role="button" aria-label="Scegli foto JPG">
+    <strong>Trascina qui le foto JPG</strong>
+    <span>oppure tocca per sceglierle · anche più di una, o incollale</span>
+  </div>
+  <input id="file" type="file" accept="image/jpeg,.jpg,.jpeg" multiple>
+
+  <section class="settings" aria-label="Regolazioni">
+    <div class="field">
+      <label for="quality">Qualità</label>
+      <input id="quality" type="range" min="40" max="100" step="1" value="82">
+      <output id="qout" for="quality">82</output>
+    </div>
+    <div class="field">
+      <label for="maxside">Lato lungo</label>
+      <select id="maxside">
+        <option value="0">originale</option>
+        <option value="3840">max 3840 px</option>
+        <option value="2560">max 2560 px</option>
+        <option value="1920">max 1920 px</option>
+        <option value="1280">max 1280 px</option>
+        <option value="800">max 800 px</option>
+      </select>
+    </div>
+  </section>
+
+  <div class="bar">
+    <span id="summary" class="summary">Nessuna foto</span>
+    <div class="actions">
+      <button id="clear" type="button" disabled>Svuota</button>
+      <button id="share" type="button" hidden disabled>Condividi</button>
+      <button id="zip" type="button" class="primary" disabled>Scarica tutte (.zip)</button>
+    </div>
+  </div>
+
+  <ul id="list" class="list"></ul>
+  <p id="empty" class="empty">Le foto convertite compaiono qui.</p>
+
+  <p class="note">La conversione avviene nel tuo dispositivo: le foto non lasciano il telefono o il computer. La rotazione EXIF viene applicata ai pixel, poi tutti i metadati (EXIF, GPS, profilo) vengono scartati.</p>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const drop = $('drop'), fileInput = $('file'), list = $('list'), empty = $('empty');
+  const quality = $('quality'), qout = $('qout'), maxside = $('maxside');
+  const summary = $('summary'), btnZip = $('zip'), btnClear = $('clear'), btnShare = $('share');
+
+  /** @type {{id:number,file:File,status:string,blob?:Blob,w?:number,h?:number,err?:string,url?:string,el:HTMLElement}[]} */
+  let items = [];
+  let nextId = 1;
+  let queue = Promise.resolve();
+  let generation = 0;
+
+  // ---- support check ----
+  let webpOK = true;
+  (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 1;
+    webpOK = c.toDataURL('image/webp').startsWith('data:image/webp');
+    if (!webpOK) $('unsupported').hidden = false;
+  })();
+
+  // ---- settings (remembered per device) ----
+  try {
+    const s = JSON.parse(localStorage.getItem('jpg2webp') || '{}');
+    if (s.q) quality.value = s.q;
+    if (s.m != null) maxside.value = String(s.m);
+  } catch (_) {}
+  qout.textContent = quality.value;
+  const saveSettings = () => { try { localStorage.setItem('jpg2webp', JSON.stringify({ q: quality.value, m: maxside.value })); } catch (_) {} };
+
+  let reTimer;
+  const reconvertAll = () => {
+    saveSettings();
+    clearTimeout(reTimer);
+    reTimer = setTimeout(() => { generation++; items.forEach(enqueue); }, 250);
+  };
+  quality.addEventListener('input', () => { qout.textContent = quality.value; reconvertAll(); });
+  maxside.addEventListener('change', reconvertAll);
+
+  // ---- input ----
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+  ['dragenter', 'dragover'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === document.documentElement) drop.classList.remove('over'); }));
+  document.addEventListener('drop', (e) => addFiles(e.dataTransfer && e.dataTransfer.files));
+  document.addEventListener('paste', (e) => addFiles(e.clipboardData && e.clipboardData.files));
+
+  // Opened from the OS ("Apri con…") when installed on desktop Chrome/Edge
+  if ('launchQueue' in window) {
+    window.launchQueue.setConsumer(async (params) => {
+      const files = [];
+      for (const h of params.files || []) { try { files.push(await h.getFile()); } catch (_) {} }
+      addFiles(files);
+    });
+  }
+
+  const isJpeg = (f) => f && (f.type === 'image/jpeg' || /\.jpe?g$/i.test(f.name));
+
+  function addFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    for (const file of fileList) {
+      if (!isJpeg(file)) continue;
+      const item = { id: nextId++, file, status: 'pending', el: document.createElement('li') };
+      item.el.className = 'item';
+      items.push(item);
+      list.appendChild(item.el);
+      render(item);
+      enqueue(item);
+    }
+    refresh();
+  }
+
+  function enqueue(item) {
+    const gen = generation;
+    item.status = 'pending';
+    render(item); refresh();
+    queue = queue.then(() => (items.includes(item) && gen === generation) ? convert(item) : null);
+  }
+
+  // ---- conversion ----
+  async function decode(file) {
+    if ('createImageBitmap' in window) {
+      try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) {}
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image(); img.src = url; await img.decode(); return img;
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  async function convert(item) {
+    item.status = 'working'; render(item);
+    try {
+      if (!webpOK) throw new Error('WebP non supportato da questo browser');
+      const src = await decode(item.file);
+      const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
+      const max = Number(maxside.value) || 0;
+      const k = max && Math.max(w0, h0) > max ? max / Math.max(w0, h0) : 1;
+      const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(src, 0, 0, w, h);
+      if (src.close) src.close();
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', Number(quality.value) / 100));
+      canvas.width = canvas.height = 0;
+      if (!blob || blob.type !== 'image/webp') throw new Error('WebP non supportato da questo browser');
+      if (item.url) URL.revokeObjectURL(item.url);
+      Object.assign(item, { blob, w, h, url: URL.createObjectURL(blob), status: 'done', err: undefined });
+    } catch (e) {
+      item.status = 'error'; item.err = (e && e.message) || 'Impossibile leggere il file';
+    }
+    render(item); refresh();
+  }
+
+  // ---- rendering ----
+  const fmt = (n) => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : (n / 1048576).toFixed(2).replace('.', ',') + ' MB';
+  const outName = (name) => name.replace(/\.jpe?g$/i, '') + '.webp';
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render(item) {
+    const name = esc(outName(item.file.name));
+    if (item.status === 'done') {
+      const pct = Math.round((1 - item.blob.size / item.file.size) * 100);
+      item.el.innerHTML = `
+        <img class="thumb" src="${item.url}" alt="">
+        <div class="meta"><div class="name">${name}</div>
+          <div class="info">${item.w}×${item.h} · ${fmt(item.file.size)} → ${fmt(item.blob.size)} <span class="gain">${pct >= 0 ? '−' + pct : '+' + -pct}%</span></div></div>
+        <div class="item-actions"><button type="button" data-a="dl">Scarica</button><button type="button" data-a="rm" aria-label="Rimuovi">✕</button></div>`;
+    } else if (item.status === 'error') {
+      item.el.innerHTML = `
+        <div class="thumb"></div>
+        <div class="meta"><div class="name">${esc(item.file.name)}</div><div class="info error">${esc(item.err)}</div></div>
+        <div class="item-actions"><button type="button" data-a="rm" aria-label="Rimuovi">✕</button></div>`;
+    } else {
+      item.el.innerHTML = `
+        <div class="thumb"></div>
+        <div class="meta"><div class="name">${name}</div><div class="info">${fmt(item.file.size)} · ${item.status === 'working' ? 'conversione…' : 'in coda'}</div></div>
+        <div class="item-actions"><div class="spinner" aria-hidden="true"></div></div>`;
+    }
+  }
+
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const item = items.find((i) => i.el.contains(b)); if (!item) return;
+    if (b.dataset.a === 'dl') download(item.blob, outName(item.file.name));
+    if (b.dataset.a === 'rm') remove(item);
+  });
+
+  function remove(item) {
+    if (item.url) URL.revokeObjectURL(item.url);
+    item.el.remove();
+    items = items.filter((i) => i !== item);
+    refresh();
+  }
+
+  function refresh() {
+    const done = items.filter((i) => i.status === 'done');
+    const busy = items.some((i) => i.status === 'pending' || i.status === 'working');
+    empty.hidden = items.length > 0;
+    btnClear.disabled = !items.length;
+    btnZip.disabled = busy || !done.length;
+    btnZip.textContent = done.length > 1 ? `Scarica tutte (.zip)` : 'Scarica';
+    btnShare.disabled = busy || !done.length;
+    if (!items.length) { summary.textContent = 'Nessuna foto'; return; }
+    const a = done.reduce((s, i) => s + i.file.size, 0), b = done.reduce((s, i) => s + i.blob.size, 0);
+    summary.textContent = busy
+      ? `${done.length}/${items.length} convertite…`
+      : `${done.length} foto · ${fmt(a)} → ${fmt(b)}` + (a ? ` (−${Math.round((1 - b / a) * 100)}%)` : '');
+  }
+
+  btnClear.addEventListener('click', () => { generation++; [...items].forEach(remove); });
+
+  btnZip.addEventListener('click', async () => {
+    const done = items.filter((i) => i.status === 'done');
+    if (done.length === 1) return download(done[0].blob, outName(done[0].file.name));
+    const zip = await makeZip(done.map((i) => ({ name: outName(i.file.name), blob: i.blob })));
+    download(zip, `webp-${new Date().toISOString().slice(0, 10)}.zip`);
+  });
+
+  // Web Share: on iPhone/Android lets you "Salva immagine" straight into the gallery
+  if (navigator.canShare && navigator.canShare({ files: [new File([''], 'x.webp', { type: 'image/webp' })] })) {
+    btnShare.hidden = false;
+    btnShare.addEventListener('click', async () => {
+      const files = items.filter((i) => i.status === 'done').map((i) => new File([i.blob], outName(i.file.name), { type: 'image/webp' }));
+      try { await navigator.share({ files }); } catch (_) {}
+    });
+  }
+
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  // ---- minimal ZIP writer (stored, no compression: WebP is already compressed) ----
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (u8) => { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+
+  async function makeZip(entries) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    const used = new Set(); let offset = 0;
+    const d = new Date();
+    const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    for (const e of entries) {
+      let name = e.name, n = 1;
+      while (used.has(name)) name = e.name.replace(/\.webp$/, `-${++n}.webp`);
+      used.add(name);
+      const nameB = enc.encode(name);
+      const data = new Uint8Array(await e.blob.arrayBuffer());
+      const crc = crc32(data), size = data.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true);
+      lh.setUint16(26, nameB.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh, nameB, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true); ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true);
+      ch.setUint16(28, nameB.length, true); ch.setUint32(42, offset, true);
+      central.push(ch, nameB);
+      offset += 30 + nameB.length + size;
+    }
+    const cdSize = central.reduce((s, p) => s + p.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end], { type: 'application/zip' });
+  }
+
+  // ---- offline ----
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+})();
+</script>
+</body>
+</html>

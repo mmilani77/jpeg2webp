@@ -1,0 +1,19 @@
+{
+  "name": "JPG → WebP",
+  "short_name": "WebP",
+  "description": "Converte foto JPG in WebP nel browser, senza upload e senza metadati.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f5f4",
+  "theme_color": "#0b7a68",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    { "action": "./", "accept": { "image/jpeg": [".jpg", ".jpeg"] } }
+  ]
+}
