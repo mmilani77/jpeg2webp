@@ -42,11 +42,15 @@ async function load() {
   return factory({ noInitialRun: true });
 }
 
-self.onmessage = async ({ data: { id, pixels, width, height, quality, sharp } }) => {
+self.onmessage = async ({ data: { id, pixels, width, height, quality, sharp, lossless } }) => {
   try {
     modP = modP || load().catch((e) => { modP = undefined; throw e; });
     const mod = await modP;
-    const raw = mod.encode(pixels, width, height, { ...BASE, quality, use_sharp_yuv: sharp ? 1 : 0 });
+    const opts = lossless
+      // Lossless: quality = compression effort. q100 + method 5 matched method 6 in tests at ~4x the speed.
+      ? { ...BASE, lossless: 1, quality: 100, method: 5, use_sharp_yuv: 0 }
+      : { ...BASE, quality, use_sharp_yuv: sharp ? 1 : 0 };
+    const raw = mod.encode(pixels, width, height, opts);
     if (!raw) throw new Error('Codifica WebP non riuscita');
     const out = cleanWebp(new Uint8Array(raw)).slice();
     self.postMessage({ id, buffer: out.buffer }, [out.buffer]);

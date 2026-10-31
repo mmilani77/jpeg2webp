@@ -72,6 +72,7 @@
   .field.check { gap: 8px; }
   .field.check label { color: var(--ink); white-space: normal; }
   .field.check .cost { color: var(--muted); }
+  .field.off { opacity: .45; }
   input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; flex: none; }
   input[type=range] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
   select {
@@ -155,6 +156,10 @@
       </select>
     </div>
     <div class="field check">
+      <input id="lossless" type="checkbox">
+      <label for="lossless">Lossless <span class="cost">(per screenshot e grafiche)</span></label>
+    </div>
+    <div class="field check">
       <input id="sharp" type="checkbox">
       <label for="sharp">Bordi colorati più nitidi <span class="cost">(+10% circa di peso)</span></label>
     </div>
@@ -181,7 +186,7 @@ import { cleanWebp } from './webp-clean.js';
   'use strict';
   const $ = (id) => document.getElementById(id);
   const drop = $('drop'), fileInput = $('file'), list = $('list'), empty = $('empty');
-  const quality = $('quality'), qout = $('qout'), maxside = $('maxside'), sharp = $('sharp');
+  const quality = $('quality'), qout = $('qout'), maxside = $('maxside'), sharp = $('sharp'), lossless = $('lossless');
   const summary = $('summary'), btnZip = $('zip'), btnClear = $('clear'), btnShare = $('share');
 
   /** @type {{id:number,file:File,status:string,blob?:Blob,w?:number,h?:number,err?:string,url?:string,el:HTMLElement}[]} */
@@ -220,7 +225,7 @@ import { cleanWebp } from './webp-clean.js';
     return new Promise((resolve, reject) => {
       const id = ++wid;
       pending.set(id, { resolve, reject });
-      worker.postMessage({ id, pixels: img.data, width: img.width, height: img.height, quality: q, sharp: sharp.checked }, [img.data.buffer]);
+      worker.postMessage({ id, pixels: img.data, width: img.width, height: img.height, quality: q, sharp: sharp.checked, lossless: lossless.checked }, [img.data.buffer]);
     });
   }
 
@@ -230,9 +235,10 @@ import { cleanWebp } from './webp-clean.js';
     if (s.q) quality.value = s.q;
     if (s.m != null) maxside.value = String(s.m);
     sharp.checked = !!s.s;
+    lossless.checked = !!s.l;
   } catch (_) {}
   qout.textContent = quality.value;
-  const saveSettings = () => { try { localStorage.setItem('jpg2webp', JSON.stringify({ q: quality.value, m: maxside.value, s: sharp.checked })); } catch (_) {} };
+  const saveSettings = () => { try { localStorage.setItem('jpg2webp', JSON.stringify({ q: quality.value, m: maxside.value, s: sharp.checked, l: lossless.checked })); } catch (_) {} };
 
   let reTimer;
   const reconvertAll = () => {
@@ -243,6 +249,14 @@ import { cleanWebp } from './webp-clean.js';
   quality.addEventListener('input', () => { qout.textContent = quality.value; reconvertAll(); });
   maxside.addEventListener('change', reconvertAll);
   sharp.addEventListener('change', reconvertAll);
+  // Lossless ignores quality and sharp YUV: grey them out so it's clear they don't apply
+  const syncLossless = () => {
+    quality.disabled = sharp.disabled = lossless.checked;
+    quality.closest('.field').classList.toggle('off', lossless.checked);
+    sharp.closest('.field').classList.toggle('off', lossless.checked);
+  };
+  syncLossless();
+  lossless.addEventListener('change', () => { syncLossless(); reconvertAll(); });
 
   // ---- input ----
   drop.addEventListener('click', () => fileInput.click());
@@ -317,6 +331,7 @@ import { cleanWebp } from './webp-clean.js';
       }
       if (!bytes) {
         // Fallback: the browser's own encoder, then the same metadata cleanup
+        if (lossless.checked) throw new Error('Lossless non disponibile: encoder libwebp non caricato');
         if (!webpOK) throw new Error('WebP non supportato da questo browser');
         const b = await new Promise((res) => canvas.toBlob(res, 'image/webp', q / 100));
         if (!b || b.type !== 'image/webp') throw new Error('WebP non supportato da questo browser');
