@@ -1,5 +1,9 @@
-// Cache-first app shell: after the first visit the app works fully offline.
-const CACHE = 'img2webp-v6';
+// Offline support.
+// - The page itself (navigations) is network-first: online you always get the latest version,
+//   offline you get the cached copy.
+// - Everything else (scripts, encoder, icons) is cache-first; bumping CACHE refreshes it.
+// - Install bypasses the HTTP cache so an update never stores a stale file.
+const CACHE = 'img2webp-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +21,11 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -31,15 +39,23 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((hit) => {
-      if (hit) return hit;
-      return fetch(req)
+
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req, { cache: 'no-cache' })
         .then((res) => {
-          if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+          if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('./index.html', copy)); }
           return res;
         })
-        .catch(() => (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()));
-    })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  e.respondWith(
+    caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req).then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+      return res;
+    }))
   );
 });
